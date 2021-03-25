@@ -13,11 +13,12 @@ class Model(nn.Module):
         if config.text_encoder in ['bert']:
             encoder = BERTEncoder(config)
         self.encoder = encoder
-        self.cls_fc = nn.Linear(config.hidden_dim, 1)
+        self.cls_fc = nn.Linear(config.hidden_dim+config.feature_dim*2, 1)
         self.mask_fc = nn.Linear(config.hidden_dim, config.vocab_num)
     
     def forward(self, batch):
         h = self.encoder(batch)  # [batch_size, seq_len, hiden_dim]
-        cls_outputs = self.cls_fc(h[:, 0, :]).squeeze(-1)
+        cls_h = torch.cat([h[:, 0, :], batch['features']], 1)
+        cls_outputs = self.cls_fc(cls_h).squeeze(-1)
         mask_outputs = self.mask_fc(h)
         return cls_outputs, mask_outputs

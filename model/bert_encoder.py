@@ -7,11 +7,13 @@ from transformers import BertModel, BertConfig
 class BERTEncoder(nn.Module):        
     def __init__(self, config):
         super().__init__()
-        #bert_config = BertConfig(vocab_size=config.vocab_num, hidden_size=config.hidden_dim, num_hidden_layers=config.num_hidden_layers, num_attention_heads=config.num_attention_heads, intermediate_size=config.intermediate_size)
-        #self.bert = BertModel(bert_config)
-        self.bert = BertModel.from_pretrained('bert-base-chinese')
-        self.bert.resize_token_embeddings(104)
-        self.bert.resize_token_embeddings(config.vocab_num)
+        if config.pretrain:
+            self.bert = BertModel.from_pretrained('bert-base-chinese')
+            self.bert.resize_token_embeddings(104)
+            self.bert.resize_token_embeddings(config.vocab_num)
+        else:
+            bert_config = BertConfig(vocab_size=config.vocab_num, hidden_size=config.hidden_dim, num_hidden_layers=config.num_hidden_layers, num_attention_heads=config.num_attention_heads, intermediate_size=config.intermediate_size)
+            self.bert = BertModel(bert_config)
     
     def forward(self, batch):
         x, y = batch['inputs'], batch['segs']

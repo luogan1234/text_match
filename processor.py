@@ -30,11 +30,14 @@ class Processor(object):
         loss = F.cross_entropy(outputs.transpose(1, 2), labels, ignore_index=0)
         return loss
     
-    def train_one_step(self, batch, global_steps):
+    def train_one_step(self, batch, pretrain):
         cls_outputs, mask_outputs = self.model(batch)
         cls_loss = self.bce_loss(cls_outputs, batch['cls_labels'])
         mask_loss = self.ce_loss(mask_outputs, batch['mask_labels'])
-        loss = cls_loss+mask_loss
+        if pretrain:
+            loss = mask_loss
+        else:
+            loss = cls_loss+mask_loss
         loss.backward()
         self.optimizer.step()
         self.optimizer.zero_grad()
@@ -93,10 +96,50 @@ class Processor(object):
             self.optimizer = optim.AdamW(self.model.parameters(), lr=self.config.lr())
             best_para = self.model.state_dict()
             train, valid = self.data_loader.get_train()
+            train_iter = iter(train)
             print('Train batch size {}, eval batch size {}.'.format(self.config.batch_size(True), self.config.batch_size(False)))
             print('Batch number: train {}, valid {}.'.format(len(train), len(valid)))
-            max_valid_auc, patience, iteration, global_steps = 0.0, 0, 0, 0
-            train_iter = iter(train)
+            if self.config.text_encoder == 'bert':
+                if os.path.exists('data/bert_embeddings.pth'):
+                    with open('data/bert_embeddings.pth', 'rb') as f:
+                        best_para = torch.load(f)
+                    self.model.encoder.bert.embeddings.word_embeddings.load_state_dict(best_para)
+                else:
+                    print('Stage 1:')
+                    for i, p in enumerate(self.model.encoder.bert.parameters()):
+                        if i > 0:
+                            p.requires_grad = False
+                    min_train_loss, patience, iteration = 1e16, 0, 0
+                    try:
+                        while patience <= self.config.early_stop_time() and iteration < 40:
+                            iteration += 1
+                            train_mask_loss = 0.0
+                            train_tqdm = tqdm.tqdm(range(min(len(train), self.config.max_steps)))
+                            train_tqdm.set_description('Iteration {} | train_mask_loss: {:.4f}'.format(iteration, 0))
+                            for steps in train_tqdm:
+                                batch = next(train_iter)
+                                loss, cls_loss, mask_loss = self.train_one_step(batch, True)
+                                train_mask_loss += mask_loss
+                                train_tqdm.set_description('Iteration {} | train_mask_loss: {:.4f}'.format(iteration, mask_loss))
+                            steps += 1
+                            train_mask_loss /= steps
+                            print('Average train_mask_loss: {:.4f}.'.format(train_mask_loss))
+                            if train_mask_loss < min_train_loss:
+                                patience = 0
+                                min_train_loss = train_mask_loss
+                                best_para = copy.deepcopy(self.model.encoder.bert.embeddings.word_embeddings.state_dict())
+                            patience += 1
+                    except KeyboardInterrupt:
+                        train_tqdm.close()
+                        print('Exiting from training early.')
+                    with open('data/bert_embeddings.pth', 'wb') as f:
+                        torch.save(best_para, f)
+                    self.model.encoder.bert.embeddings.word_embeddings.load_state_dict(best_para)
+                    for i, p in enumerate(self.model.encoder.bert.parameters()):
+                        if i > 0:
+                            p.requires_grad = True
+                    print('Stage 2:')
+            max_valid_auc, patience, iteration = 0.0, 0, 0
             try:
                 while patience <= self.config.early_stop_time():
                     iteration += 1
@@ -105,8 +148,7 @@ class Processor(object):
                     train_tqdm.set_description('Iteration {} | train_loss: {:.4f}'.format(iteration, 0))
                     for steps in train_tqdm:
                         batch = next(train_iter)
-                        global_steps += 1
-                        loss, cls_loss, mask_loss = self.train_one_step(batch, global_steps)
+                        loss, cls_loss, mask_loss = self.train_one_step(batch, False)
                         train_loss += loss
                         train_cls_loss += cls_loss
                         train_mask_loss += mask_loss

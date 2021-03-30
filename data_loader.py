@@ -40,7 +40,7 @@ class MyDataset(Dataset):
         return len(self.data)
     
     def __getitem__(self, idx):
-        item = {'seq1': self.data[idx][0], 'seq2': self.data[idx][1], 'label': self.labels[idx], 'fea1': self.features[idx][0], 'fea2': self.features[idx][1]}
+        item = {'seq1': self.data[idx][0], 'seq2': self.data[idx][1], 'label': self.labels[idx], 'feature': self.features[idx]}
         return item
 
 class MyCollation:
@@ -89,7 +89,7 @@ class MyCollation:
             segs.append(seg)
             mask_labels.append(mask_label)
             cls_labels.append(datum['label'])
-            features.append(np.concatenate([datum['fea1'], datum['fea2']], 0))
+            features.append(datum['feature'])
         inputs = torch.tensor(inputs, dtype=torch.long).to(self.config.device)
         segs = torch.tensor(segs, dtype=torch.long).to(self.config.device)
         features = torch.tensor(features, dtype=torch.float).to(self.config.device)
@@ -117,7 +117,7 @@ class MyDataLoader:
         self.train = MyDataset(config.train, True)
         self.test = MyDataset(config.test, False)
         config.vocabs = self.train.vocabs.union(self.test.vocabs)
-        config.vocab_num = max(self.train.vocab_num, self.test.vocab_num)
+        config.vocab_num = max(self.train.vocab_num, self.test.vocab_num, 25000)
         print('Unknown token number in test:', len(self.test.vocabs-self.train.vocabs))
         self.config = config
         self.fn_train = MyCollation(config, True)

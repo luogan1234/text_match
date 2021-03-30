@@ -13,7 +13,7 @@ class Model(nn.Module):
         if config.text_encoder in ['bert']:
             encoder = BERTEncoder(config)
         self.encoder = encoder
-        self.cls_fc = nn.Linear(config.hidden_dim+config.feature_dim*2, 1)
+        self.cls_fc = nn.Linear(config.hidden_dim+config.feature_dim, 1)
         self.mask_fc = nn.Linear(config.hidden_dim, config.vocab_num)
     
     def forward(self, batch):

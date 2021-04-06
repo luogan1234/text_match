@@ -26,7 +26,6 @@ class MyDataset(Dataset):
                     self.labels.append(int(items[2]))
                 else:
                     self.labels.append(-1)
-        self.features = np.load('data/{}.npy'.format(file))
         self.vocab_num += 1
         print('Vocab number:', self.vocab_num)
     
@@ -40,7 +39,7 @@ class MyDataset(Dataset):
         return len(self.data)
     
     def __getitem__(self, idx):
-        item = {'seq1': self.data[idx][0], 'seq2': self.data[idx][1], 'label': self.labels[idx], 'feature': self.features[idx]}
+        item = {'seq1': self.data[idx][0], 'seq2': self.data[idx][1], 'label': self.labels[idx]}
         return item
 
 class MyCollation:
@@ -67,7 +66,7 @@ class MyCollation:
         return res, label_res
     
     def __call__(self, data):
-        inputs, segs, mask_labels, cls_labels, features = [], [], [], [], []
+        inputs, segs, mask_labels, cls_labels = [], [], [], []
         max_len = 0
         for datum in data:
             max_len = max(max_len, len(datum['seq1'])+len(datum['seq2'])+3)
@@ -89,11 +88,9 @@ class MyCollation:
             segs.append(seg)
             mask_labels.append(mask_label)
             cls_labels.append(datum['label'])
-            features.append(datum['feature'])
         inputs = torch.tensor(inputs, dtype=torch.long).to(self.config.device)
         segs = torch.tensor(segs, dtype=torch.long).to(self.config.device)
-        features = torch.tensor(features, dtype=torch.float).to(self.config.device)
-        res = {'inputs': inputs, 'segs': segs, 'mask_labels': mask_labels, 'cls_labels': cls_labels, 'features': features}
+        res = {'inputs': inputs, 'segs': segs, 'mask_labels': mask_labels, 'cls_labels': cls_labels}
         return res
 
 class InfiniteDataLoader(DataLoader):
@@ -137,6 +134,10 @@ class MyDataLoader:
         train = InfiniteDataLoader(train, self.config.batch_size(True), shuffle=True, collate_fn=self.fn_train)
         valid = DataLoader(valid, self.config.batch_size(False), shuffle=False, collate_fn=self.fn_eval)
         return train, valid
+    
+    def get_all(self):
+        data = DataLoader(self.train+self.test, self.config.batch_size(False), shuffle=False, collate_fn=self.fn_eval)
+        return data
     
     def get_predict(self):
         data = DataLoader(self.test, self.config.batch_size(False), shuffle=False, collate_fn=self.fn_eval)

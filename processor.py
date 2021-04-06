@@ -38,7 +38,7 @@ class Processor(object):
         if pretrain:
             loss = mask_loss
         else:
-            loss = cls_loss+mask_loss
+            loss = cls_loss+self.config.mask_w*mask_loss
         loss.backward()
         self.optimizer.step()
         self.scheduler.step()
@@ -105,68 +105,60 @@ class Processor(object):
             return
         with open(self.config.store_path(), 'w') as f:
             f.write('!')
-        self.init()
         train, valid = self.data_loader.get_train()
         train_iter = iter(train)
         print('Train batch size {}, eval batch size {}.'.format(self.config.batch_size(True), self.config.batch_size(False)))
         print('Batch number: train {}, valid {}.'.format(len(train), len(valid)))
-        if self.config.text_encoder == 'bert':
-            if not os.path.exists(self.config.pretrain_path()):
-                print('Stage 1:')
-                self.optimizer = optim.AdamW(self.optimizer_grouped_parameters, lr=self.config.learning_rate(1))
-                self.scheduler = get_linear_schedule_with_warmup(self.optimizer, num_warmup_steps=self.config.warmup_steps0, num_training_steps=self.config.training_steps0)
-                print('warmup steps: {}, training steps: {}'.format(self.config.warmup_steps0, self.config.training_steps0))
-                for i, p in enumerate(self.model.encoder.bert.parameters()):
-                    if i > 0:
-                        p.requires_grad = False
-                min_train_loss, epoch, global_steps = 1e16, 0, 0
-                try:
-                    while global_steps < self.config.training_steps0:
-                        epoch += 1
-                        train_mask_loss = 0.0
-                        train_tqdm = tqdm.tqdm(range(len(train)))
-                        train_tqdm.set_description('Epoch {} | train_mask_loss: {:.4f}'.format(epoch, 0))
-                        for steps in train_tqdm:
-                            batch = next(train_iter)
-                            loss, cls_loss, mask_loss = self.train_one_step(batch, True)
-                            train_mask_loss += mask_loss
-                            train_tqdm.set_description('Epoch {} | train_mask_loss: {:.4f}'.format(epoch, mask_loss))
-                        steps += 1
-                        global_steps += steps
-                        train_mask_loss /= steps
-                        print('Average train_mask_loss: {:.4f}.'.format(train_mask_loss))
-                        if train_mask_loss < min_train_loss:
-                            min_train_loss = train_mask_loss
-                            word_embeddings = copy.deepcopy(self.model.encoder.bert.embeddings.word_embeddings.state_dict())
-                            mask_fc = copy.deepcopy(self.model.mask_fc.state_dict())
-                except KeyboardInterrupt:
-                    train_tqdm.close()
-                    print('Exiting from training early.')
-                    os.remove(self.config.store_path())
-                    return
-                with open(self.config.pretrain_path(), 'wb') as f:
-                    torch.save([word_embeddings, mask_fc], f)
-                for i, p in enumerate(self.model.encoder.bert.parameters()):
-                    if i > 0:
-                        p.requires_grad = True
-            print('Stage 2:')
+        if not os.path.exists(self.config.pretrain_path()):
+            print('Stage 1:')
             self.init()
-            with open(self.config.pretrain_path(), 'rb') as f:
-                [word_embeddings, mask_fc] = torch.load(f)
-            self.model.encoder.bert.embeddings.word_embeddings.load_state_dict(word_embeddings)
-            #self.model.mask_fc.load_state_dict(mask_fc)
+            self.optimizer = optim.AdamW(self.optimizer_grouped_parameters, lr=self.config.learning_rate(1))
+            self.scheduler = get_linear_schedule_with_warmup(self.optimizer, num_warmup_steps=self.config.warmup_steps0, num_training_steps=self.config.training_steps0)
+            print('warmup steps: {}, training steps: {}'.format(self.config.warmup_steps0, self.config.training_steps0))
+            for i, p in enumerate(self.model.encoder.bert.parameters()):
+                if i > 0:
+                    p.requires_grad = False
+            min_train_loss, epoch, global_steps = 1e16, 0, 0
+            try:
+                while global_steps < self.config.training_steps0:
+                    epoch += 1
+                    train_mask_loss = 0.0
+                    train_tqdm = tqdm.tqdm(range(len(train)))
+                    train_tqdm.set_description('Epoch {} | train_mask_loss: {:.4f}'.format(epoch, 0))
+                    for steps in train_tqdm:
+                        batch = next(train_iter)
+                        loss, cls_loss, mask_loss = self.train_one_step(batch, True)
+                        train_mask_loss += mask_loss
+                        train_tqdm.set_description('Epoch {} | train_mask_loss: {:.4f}'.format(epoch, mask_loss))
+                    steps += 1
+                    global_steps += steps
+                    train_mask_loss /= steps
+                    print('Average train_mask_loss: {:.4f}.'.format(train_mask_loss))
+                    if train_mask_loss < min_train_loss:
+                        min_train_loss = train_mask_loss
+                        word_embeddings = copy.deepcopy(self.model.encoder.bert.embeddings.word_embeddings.state_dict())
+                        mask_fc = copy.deepcopy(self.model.mask_fc.state_dict())
+            except KeyboardInterrupt:
+                train_tqdm.close()
+                print('Exiting from training early.')
+                os.remove(self.config.store_path())
+                return
+            with open(self.config.pretrain_path(), 'wb') as f:
+                torch.save([word_embeddings, mask_fc], f)
+            for i, p in enumerate(self.model.encoder.bert.parameters()):
+                if i > 0:
+                    p.requires_grad = True
+            print('Stage 2:')
+        self.init()
+        with open(self.config.pretrain_path(), 'rb') as f:
+            [word_embeddings, mask_fc] = torch.load(f)
+        self.model.encoder.bert.embeddings.word_embeddings.load_state_dict(word_embeddings)
+        #self.model.mask_fc.load_state_dict(mask_fc)
         max_valid_auc, epoch, global_steps = 0.0, 0, 0
         best_scores = {}
         self.optimizer = optim.AdamW(self.optimizer_grouped_parameters, lr=self.config.learning_rate(2))
         self.scheduler = get_linear_schedule_with_warmup(self.optimizer, num_warmup_steps=self.config.warmup_steps, num_training_steps=self.config.training_steps)
         print('warmup steps: {}, training steps: {}'.format(self.config.warmup_steps, self.config.training_steps))
-        if self.config.finetune:
-            print('Finetune from existing paramters.')
-            file = self.config.store_path(False)
-            if os.path.exists(file):
-                with open(file, 'rb') as f:
-                    best_para = torch.load(f)
-                self.model.load_state_dict(best_para)
         try:
             while global_steps < self.config.training_steps:
                 epoch += 1
@@ -201,6 +193,27 @@ class Processor(object):
             obj = self.config.parameter_info()
             obj.update(best_scores)
             f.write(json.dumps(obj)+'\n')
+    
+    def extract_feature(self):
+        print('Extract feature:')
+        self.model = Model(self.config)
+        self.model.to(self.config.device)
+        print('model parameters number: {}.'.format(sum(p.numel() for p in self.model.parameters() if p.requires_grad)))
+        file = self.config.store_path()
+        if not os.path.exists(file):
+            return
+        with open(file, 'rb') as f:
+            best_para = torch.load(f)
+        self.model.load_state_dict(best_para)
+        self.model.eval()
+        data = self.data_loader.get_all()
+        extract_tqdm = tqdm.tqdm(data, total=len(data))
+        features = []
+        for batch in extract_tqdm:
+            outputs, loss = self.eval_one_step(batch)
+            features.append(self.model.cls_h.cpu().numpy())
+        features = np.concatenate(features, 0)
+        np.save(self.config.feature_path(), features)
     
     def predict(self):
         print('Predict starts:')

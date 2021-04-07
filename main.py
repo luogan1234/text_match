@@ -31,8 +31,8 @@ def main():
     config = Config(args.train, args.test, args.lr0, args.lr, args.bs, args.mask_w, args.seed, args.cpu)
     data_loader = MyDataLoader(config)
     processor = Processor(data_loader, config)
-    processor.train()
-    #processor.extract_feature()
+    #processor.train()
+    processor.extract_feature()
     #processor.predict()
 
 if __name__ == '__main__':

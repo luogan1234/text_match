@@ -23,7 +23,7 @@ def main():
     parser.add_argument('-lr0', type=float, default=3e-4)
     parser.add_argument('-lr', type=float, default=6e-5)
     parser.add_argument('-bs', type=int, default=32)
-    parser.add_argument('-mask_w', type=float, default=0)
+    parser.add_argument('-mask_w', type=float, default=1.0)
     parser.add_argument('-seed', type=int, default=0)
     parser.add_argument('-cpu', action='store_true')
     args = parser.parse_args()
@@ -31,7 +31,7 @@ def main():
     config = Config(args.train, args.test, args.lr0, args.lr, args.bs, args.mask_w, args.seed, args.cpu)
     data_loader = MyDataLoader(config)
     processor = Processor(data_loader, config)
-    #processor.train()
+    processor.train()
     processor.extract_feature()
     #processor.predict()
 

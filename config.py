@@ -13,7 +13,7 @@ class Config:
         self.seed = seed
         self.device = 'cpu' if cpu else 'cuda'
         
-        self.path = '/data/luogan/text_match'
+        self.path = '.' #'/data/luogan/text_match'
         self.dropout_rate = 0.1
         epoch_steps = 124999//self.bs+1
         self.warmup_steps = 2*epoch_steps

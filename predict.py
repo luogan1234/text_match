@@ -13,9 +13,9 @@ if __name__ == '__main__':
         for line in f:
             items = line.split('\t')
             labels.append(int(items[2]))
-    train_f0 = np.load('data/{}.npy'.format(args.train))
-    test_f0 = np.load('data/{}.npy'.format(args.test))
-    path = '/data/luogan/text_match'
+    train_f0 = np.load('result/features/{}.npy'.format(args.train))
+    test_f0 = np.load('result/features/{}.npy'.format(args.test))
+    path = '.' #'/data/luogan/text_match'
     predicts = []
     for seed in range(100):
         file = '{}/result/features/{}_{}_{}.npy'.format(path, args.train, args.test, seed)

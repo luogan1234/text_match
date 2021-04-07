@@ -24,7 +24,7 @@ def save_feature(file, n, features):
             tmp.append(feature.reshape(n, shape[1]*2))
     feature = np.concatenate(tmp, 1)
     print(file, 'feature shape:', feature.shape)
-    np.save('data/{}.npy'.format(file), feature)
+    np.save('result/features/{}.npy'.format(file), feature)
 
 class BM25(object):
     def __init__(self, b=0.75, k1=1.6):
